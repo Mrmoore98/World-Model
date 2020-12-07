@@ -48,10 +48,10 @@ class BaseTrainer:
 
         if _test:  # Used for CartPole-v0
             self.model = MLP(num_feats[0], self.num_actions)
-        else:
-            self.model = ActorCritic(self.num_feats, self.num_actions, self.discrete)
         # else:
-            # self.model = World_model(self.device)
+        #     self.model = ActorCritic(self.num_feats, self.num_actions, self.discrete)
+        else:
+            self.model = World_model(self.device)
 
         self.model = self.model.to(self.device)
         self.model.train()

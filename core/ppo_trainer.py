@@ -98,6 +98,9 @@ class PPOTrainer(BaseTrainer):
 
         # This is the total loss
         loss = policy_loss + self.config.value_loss_weight * value_loss - self.config.entropy_loss_weight * dist_entropy
+        
+        # world model Loss 
+        loss += self.model.Loss['VAE_Loss'] + self.model.Loss['MDN_Loss']
 
         return loss, policy_loss, value_loss, dist_entropy
 
