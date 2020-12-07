@@ -1,0 +1,124 @@
+import math
+from os.path import join, exists
+import torch
+import torch.nn as nn
+from torchvision import transforms
+import numpy as np
+from .models_of_world_model import MDRNNCell, VAE, Controller
+import gym
+import gym.envs.box2d
+import matplotlib.pyplot as plt
+# # A bit dirty: manually change size of car racing env
+# gym.envs.box2d.car_racing.STATE_W, gym.envs.box2d.car_racing.STATE_H = 64, 64
+
+# Hardcoded for now
+ASIZE, LSIZE, RSIZE, RED_SIZE, SIZE =\
+    2, 32, 256, 64, 64
+
+# Same
+transform = transforms.Compose([
+    transforms.ToPILImage(),
+    transforms.Resize((RED_SIZE, RED_SIZE)),
+    transforms.ToTensor()
+])
+
+
+class World_model(nn.Module):
+    """ Utility to generate rollouts.
+
+    Encapsulate everything that is needed to generate rollouts in the TRUE ENV
+    using a controller with previously trained VAE and MDRNN.
+
+    :attr vae: VAE model loaded from mdir/vae
+    :attr mdrnn: MDRNN model loaded from mdir/mdrnn
+    :attr controller: Controller, either loaded from mdir/ctrl or randomly
+        initialized
+    """
+
+    def __init__(self, device):
+        super(World_model, self).__init__()
+        """ Build vae, rnn, controller and environment. """
+        # Loading world model and vae
+        vae_file, rnn_file, ctrl_file = \
+            [join('data/lyc_world_model', m, 'best.tar')
+             for m in ['vae', 'mdrnn', 'ctrl']]
+
+        assert exists(vae_file) and exists(rnn_file),\
+            "Either vae or mdrnn is untrained."
+
+        vae_state, rnn_state = [
+            torch.load(fname)
+            for fname in (vae_file, rnn_file)]
+
+        for m, s in (('VAE', vae_state), ('MDRNN', rnn_state)):
+            print("Loading {} at epoch {} "
+                  "with test loss {}".format(
+                      m, s['epoch'], s['precision']))
+
+        self.vae = VAE(4, LSIZE)
+        self.vae.load_state_dict(vae_state['state_dict'])
+
+        self.mdrnn = MDRNNCell(LSIZE, ASIZE, RSIZE, 5)
+
+        self.device = device
+        self.actor_critic = ActorCriticWorldModel()
+        self.hidden = torch.zeros(12, RSIZE*2).to(self.device)
+
+    def get_action_and_transition(self, obs, next_hidden=None):
+        """ Get action and transition.
+        Encode obs to latent using the VAE, then obtain estimation for next
+        latent and next hidden state using the MDRNN and compute the controller
+        corresponding action.
+        :args obs: current observation (1 x 3 x 64 x 64) torch tensor
+        :args hidden: current hidden state (1 x 256) torch tensor
+        :returns: (action, next_hidden)
+            - action: 1D np array
+            - next_hidden (1 x 256) torch tensor
+        """
+        if next_hidden is not None:
+            self.hidden = next_hidden
+
+        
+        _, latent_mu, _ = self.vae(obs)
+        x = torch.cat((latent_mu, self.hidden[:,:RSIZE]), dim=1)
+        logits, actor_logstd, value = self.actor_critic(x)
+        actions = self.compute_action(logits, actor_logstd)
+        with torch.no_grad():
+            _, _, _, _, _, next_hidden = self.mdrnn(
+                actions, latent_mu, [self.hidden[:,:RSIZE], self.hidden[:,RSIZE:]])
+        self.hidden = torch.cat(next_hidden, dim=1)
+        return logits, actor_logstd, value
+
+    def forward(self, obs, next_hidden=None):
+
+        logits, actor_logstd, value = self.get_action_and_transition(
+            obs, next_hidden)
+        return logits, actor_logstd, value
+
+    def compute_action(self, means, log_std):
+        normal_distribution = torch.distributions.normal.Normal(
+            means, torch.exp(log_std))
+        actions = normal_distribution.sample()
+        actions = actions.view(-1, ASIZE)
+        return actions
+
+    def reset_state(self):
+        self.hidden = torch.zeros(12, RSIZE*2).to(self.device)
+
+
+class ActorCriticWorldModel(nn.Module):
+    def __init__(self):
+        super(ActorCriticWorldModel, self).__init__()
+
+        num_actions = ASIZE
+        # Setup the log std output for continuous action space
+        self.actor_logstd = nn.Parameter(torch.zeros(1, num_actions))
+        self.critic_linear = nn.Linear(LSIZE + RSIZE, 1)
+        self.actor_linear = nn.Linear(LSIZE + RSIZE, num_actions)
+
+    def forward(self, x):
+
+        value = self.critic_linear(x)
+        logits = self.actor_linear(x)
+
+        return logits, self.actor_logstd, value

@@ -1,0 +1,11 @@
+datasets
+logs
+__pycache__
+.pytest_cache
+dock.sh
+Dockerfile
+frames/
+dock_config.json
+.mypy_cache
+/vae_dir
+*.pkl
