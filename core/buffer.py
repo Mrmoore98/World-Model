@@ -44,8 +44,12 @@ class PPORolloutStorage:
         for indices in sampler:
             observations_batch = self.observations[:-1].view(
                 -1, *self.observations.size()[2:])[indices]
+            next_observations_batch = self.observations[1:].view(
+                -1, *self.observations.size()[2:])[indices]
+
             actions_batch = self.actions.view(-1, self.actions.size(-1))[indices]
             hidden_batch = self.hidden.view(-1, self.hidden.size(-1))[indices]
+
             return_batch = self.returns[:-1].view(-1, 1)[indices]
             masks_batch = self.masks[:-1].view(-1, 1)[indices]
             old_action_log_probs_batch = self.action_log_probs.view(-1, 1)[indices]
@@ -53,7 +57,7 @@ class PPORolloutStorage:
 
 
             yield observations_batch, actions_batch, return_batch, \
-                  masks_batch, old_action_log_probs_batch, adv_targ, hidden_batch
+                  masks_batch, old_action_log_probs_batch, adv_targ, hidden_batch, next_observations_batch
 
     def compute_returns(self, next_value, gamma):
         if self.gae:

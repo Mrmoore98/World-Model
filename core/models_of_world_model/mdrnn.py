@@ -8,7 +8,7 @@ import torch.nn.functional as f
 from torch.distributions.normal import Normal
 
 def gmm_loss(batch, mus, sigmas, logpi, reduce=True): # pylint: disable=too-many-arguments
-    """ Computes the gmm loss.
+    """ Computes the negative log likelihood loss.
 
     Compute minus the log probability of batch under the GMM model described
     by mus, sigmas, pi. Precisely, with bs1, bs2, ... the sizes of the batch
@@ -33,17 +33,12 @@ def gmm_loss(batch, mus, sigmas, logpi, reduce=True): # pylint: disable=too-many
     batch = batch.unsqueeze(-2)
     normal_dist = Normal(mus, sigmas)
     g_log_probs = normal_dist.log_prob(batch)
-    g_log_probs = logpi + torch.sum(g_log_probs, dim=-1)
-    max_log_probs = torch.max(g_log_probs, dim=-1, keepdim=True)[0]
-    g_log_probs = g_log_probs - max_log_probs
-
-    g_probs = torch.exp(g_log_probs)
-    probs = torch.sum(g_probs, dim=-1)
-
-    log_prob = max_log_probs.squeeze() + torch.log(probs)
+    log_probs = logpi + g_log_probs.sum(dim=-1) #weighted the mixture
+    # g_probs = g_log_probs.exp()
+    # log_probs = g_probs.sum(dim=-1).log()
     if reduce:
-        return - torch.mean(log_prob)
-    return - log_prob
+        return - torch.mean(log_probs)
+    return - log_probs
 
 class _MDRNNBase(nn.Module):
     def __init__(self, latents, actions, hiddens, gaussians):
@@ -53,8 +48,10 @@ class _MDRNNBase(nn.Module):
         self.hiddens = hiddens
         self.gaussians = gaussians
 
+        # self.gmm_linear = nn.Linear(
+            # hiddens, (2 * latents + 1) * gaussians + 2)
         self.gmm_linear = nn.Linear(
-            hiddens, (2 * latents + 1) * gaussians + 2)
+            hiddens, (2 * latents + 1) * gaussians)
 
     def forward(self, *inputs):
         pass
@@ -146,8 +143,9 @@ class MDRNNCell(_MDRNNBase):
         pi = pi.view(-1, self.gaussians)
         logpi = f.log_softmax(pi, dim=-1)
 
-        r = out_full[:, -2]
+        # r = out_full[:, -2] 
+        r, d = 0, 0
 
-        d = out_full[:, -1]
+        # d = out_full[:, -1]
 
         return mus, sigmas, logpi, r, d, next_hidden

@@ -74,7 +74,7 @@ class BaseTrainer:
     def process_obs(self, obs):
         # Change to tensor, change type, add batch dimension for observation.
         if not isinstance(obs, torch.Tensor):
-            obs = np.asarray(obs)
+            obs = np.asarray(obs)/255.0
             obs = torch.from_numpy(obs.astype(np.float32)).to(self.device)
         obs = obs.float()
         if obs.ndim == 1 or obs.ndim == 3:  # Add additional batch dimension.
@@ -107,7 +107,7 @@ class BaseTrainer:
 
         return values, actions, action_log_probs
 
-    def evaluate_actions(self, obs, act, hidden=None):
+    def evaluate_actions(self, obs, act, hidden=None, next_obs=None):
         """Run models to get the values, log probability and action
         distribution entropy of the action in current state"""
 
@@ -120,7 +120,8 @@ class BaseTrainer:
             dist_entropy = dist.entropy().mean()
         else:
             if self.model.__class__.__name__ == 'World_model':
-                means, log_std, values = self.model(obs, hidden)
+                next_obs = self.process_obs(next_obs)
+                means, log_std, values = self.model(obs, hidden, next_obs)
             else:   
                 means, log_std, values = self.model(obs)
             action_std = torch.exp(log_std)

@@ -69,7 +69,7 @@ class World_model(nn.Module):
         self.hidden = torch.zeros(12, RSIZE*2).to(self.device)
         self.Loss = {'VAE_Loss': 0, 'MDN_Loss': 0}
 
-    def get_action_and_transition(self, obs, next_hidden=None):
+    def get_action_and_transition(self, obs, next_hidden=None, next_obs=None):
         """ Get action and transition.
         Encode obs to latent using the VAE, then obtain estimation for next
         latent and next hidden state using the MDRNN and compute the controller
@@ -80,12 +80,15 @@ class World_model(nn.Module):
             - action: 1D np array
             - next_hidden (1 x 256) torch tensor
         """
-        if next_hidden is not None:
+        loss = False
+        if next_hidden is not None and next_obs is not None:
             self.hidden = next_hidden
+            loss = True
 
-        reconsturct_x, latent_mu, log_var = self.vae(obs)
-        self.Loss['VAE_loss'] = self.VAE_loss(
-            reconsturct_x, obs, latent_mu, log_var)
+        reconsturct_x, latent_mu, log_var = self.vae(obs/255.0)
+        if loss:
+            self.Loss['VAE_Loss'] = self.VAE_loss(
+                reconsturct_x, obs/255.0, latent_mu, log_var)
 
         x = torch.cat((latent_mu, self.hidden[:, :RSIZE]), dim=1)
         logits, actor_logstd, value = self.actor_critic(x)
@@ -93,15 +96,20 @@ class World_model(nn.Module):
         # with torch.no_grad():
         mus, sigmas, logpi, _, _, next_hidden = self.mdrnn(
             actions, latent_mu, [self.hidden[:, :RSIZE], self.hidden[:, RSIZE:]])
+        if loss:
+            with torch.no_grad():
+                next_obs_mu, next_obs_logsigma = self.vae(next_obs/255.0)[1:] 
+                next_latent = self.get_latent(next_obs_mu, next_obs_logsigma)
+            self.Loss['MDN_Loss'] = gmm_loss(
+                next_latent, mus, sigmas, logpi)
 
-        self.Loss['MDN_Loss'] = gmm_loss(latent_next_obs, mus, sigmas, logpi)
         self.hidden = torch.cat(next_hidden, dim=1)
         return logits, actor_logstd, value
 
-    def forward(self, obs, next_hidden=None):
+    def forward(self, obs, next_hidden=None, next_obs=None):
 
         logits, actor_logstd, value = self.get_action_and_transition(
-            obs, next_hidden)
+            obs, next_hidden, next_obs)
         return logits, actor_logstd, value
 
     def compute_action(self, means, log_std):
@@ -114,10 +122,19 @@ class World_model(nn.Module):
     def reset_state(self):
         self.hidden = torch.zeros(12, RSIZE*2).to(self.device)
 
+    def get_latent(self, mu, logsigma):
+        """ Transform observations to latent space.
+
+        :returns: (latent_obs, latent_next_obs)
+            - latent: 4D torch tensor (BSIZE, SEQ_LEN, LSIZE)
+        """
+        latent = mu + logsigma.exp() * torch.randn_like(mu)     
+        return latent
+
     def VAE_loss(self, recon_x, x, mu, logsigma):
         """ VAE loss function """
         BCE = F.mse_loss(recon_x, x, size_average=False)
-
+        # import pdb; pdb.set_trace()
         # see Appendix B from VAE paper:
         # Kingma and Welling. Auto-Encoding Variational Bayes. ICLR, 2014
         # https://arxiv.org/abs/1312.6114

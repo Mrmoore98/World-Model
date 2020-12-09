@@ -71,14 +71,14 @@ class PPOTrainer(BaseTrainer):
     def compute_loss(self, sample):
         """Compute the loss of PPO"""
         observations_batch, actions_batch, return_batch, masks_batch, \
-        old_action_log_probs_batch, adv_targ, hidden_batch = sample
+        old_action_log_probs_batch, adv_targ, hidden_batch, next_observations_batch = sample
 
         assert old_action_log_probs_batch.shape == (self.mini_batch_size, 1)
         assert adv_targ.shape == (self.mini_batch_size, 1)
         assert return_batch.shape == (self.mini_batch_size, 1)
 
         values, action_log_probs, dist_entropy = self.evaluate_actions(
-            observations_batch, actions_batch, hidden_batch)
+            observations_batch, actions_batch, hidden_batch, next_observations_batch)
 
         assert values.shape == (self.mini_batch_size, 1)
         assert action_log_probs.shape == (self.mini_batch_size, 1)
@@ -91,7 +91,6 @@ class PPOTrainer(BaseTrainer):
         surr1=ratio*adv_targ
         surr2=torch.clamp(ratio,1-self.clip_param,1+self.clip_param)*adv_targ
         policy_loss = -torch.min(surr1,surr2).mean()
-        
         # [TODO] Implement value loss
         minibatch_return_6std = 6 * return_batch.std()
         value_loss = torch.mean((values - return_batch).pow(2)) / minibatch_return_6std
@@ -101,6 +100,8 @@ class PPOTrainer(BaseTrainer):
         
         # world model Loss 
         loss += self.model.Loss['VAE_Loss'] + self.model.Loss['MDN_Loss']
+        # print("VAE_loss", self.model.Loss['VAE_Loss'].item())
+        # print("MDN_Loss", self.model.Loss['MDN_Loss'].item())
 
         return loss, policy_loss, value_loss, dist_entropy
 
