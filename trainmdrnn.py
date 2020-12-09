@@ -63,23 +63,23 @@ def get_loss(latent_obs, action, reward, terminal,
     :returns: dictionary of losses, containing the gmm, the mse, the bce and
         the averaged loss.
     """
-    latent_obs, action,\
-        reward, terminal,\
-        latent_next_obs = [arr.transpose(1, 0)
-                           for arr in [latent_obs, action,
-                                       reward, terminal,
-                                       latent_next_obs]]
+    latent_obs, action, reward, terminal,latent_next_obs\
+        = [arr.transpose(1, 0) for arr in 
+                [latent_obs, action, reward, terminal,
+                    latent_next_obs]]
     mus, sigmas, logpi, rs, ds = mdrnn(action, latent_obs)
     gmm = gmm_loss(latent_next_obs, mus, sigmas, logpi)
-    bce = f.binary_cross_entropy_with_logits(ds, terminal)
-    if include_reward:
-        mse = f.mse_loss(rs, reward)
-        scale = LSIZE + 2
-    else:
-        mse = 0
-        scale = LSIZE + 1
-    loss = (gmm + bce + mse) / scale
-    return dict(gmm=gmm, bce=bce, mse=mse, loss=loss)
+    loss = gmm
+    # bce = f.binary_cross_entropy_with_logits(ds, terminal)
+    # if include_reward:
+    #     mse = f.mse_loss(rs, reward)
+    #     scale = LSIZE + 2
+    # else:
+    #     mse = 0
+    #     scale = LSIZE + 1
+    # loss = (gmm + bce + mse) / scale
+    # return dict(gmm=gmm, bce=bce, mse=mse, loss=loss)
+    return dict(loss=loss)
 
 def data_pass(epoch, train, include_reward): # pylint: disable=too-many-locals
     """ One pass through the data """
@@ -93,9 +93,9 @@ def data_pass(epoch, train, include_reward): # pylint: disable=too-many-locals
     loader.dataset.load_next_buffer()
 
     cum_loss = 0
-    cum_gmm = 0
-    cum_bce = 0
-    cum_mse = 0
+    # cum_gmm = 0
+    # cum_bce = 0
+    # cum_mse = 0
 
     pbar = tqdm(total=len(loader.dataset), desc="Epoch {}".format(epoch))
     for i, data in enumerate(loader):
@@ -117,15 +117,16 @@ def data_pass(epoch, train, include_reward): # pylint: disable=too-many-locals
                                   terminal, latent_next_obs, include_reward)
 
         cum_loss += losses['loss'].item()
-        cum_gmm += losses['gmm'].item()
-        cum_bce += losses['bce'].item()
-        cum_mse += losses['mse'].item() if hasattr(losses['mse'], 'item') else \
-            losses['mse']
+        # cum_gmm += losses['gmm'].item()
+        # cum_bce += losses['bce'].item()
+        # cum_mse += losses['mse'].item() if hasattr(losses['mse'], 'item') else \
+        #     losses['mse']
 
-        pbar.set_postfix_str("loss={loss:10.6f} bce={bce:10.6f} "
-                             "gmm={gmm:10.6f} mse={mse:10.6f}".format(
-                                 loss=cum_loss / (i + 1), bce=cum_bce / (i + 1),
-                                 gmm=cum_gmm / LSIZE / (i + 1), mse=cum_mse / (i + 1)))
+        # pbar.set_postfix_str("loss={loss:10.6f} bce={bce:10.6f} "
+        #                      "gmm={gmm:10.6f} mse={mse:10.6f}".format(
+        #                          loss=cum_loss / (i + 1), bce=cum_bce / (i + 1),
+        #                          gmm=cum_gmm / LSIZE / (i + 1), mse=cum_mse / (i + 1)))
+        pbar.set_postfix_str("loss={loss:10.6f}".format(loss=cum_loss/ (i + 1)))
         pbar.update(BSIZE)
     pbar.close()
     return cum_loss * BSIZE / len(loader.dataset)
@@ -145,9 +146,9 @@ if __name__ == "__main__":
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     # constants
-    BSIZE = 16
+    BSIZE = 32
     SEQ_LEN = 32
-    epochs = 30
+    epochs = 60
 
     # Loading VAE
     vae_file = join(args.logdir, 'vae', 'best.tar')
@@ -157,7 +158,7 @@ if __name__ == "__main__":
         "with test error {}".format(
             state['epoch'], state['precision']))
 
-    vae = VAE(3, LSIZE).to(device)
+    vae = VAE(4, LSIZE).to(device)
     vae.load_state_dict(state['state_dict'])
 
     # Loading model
@@ -186,8 +187,9 @@ if __name__ == "__main__":
 
 
     # Data Loading
-    transform = transforms.Lambda(
-        lambda x: np.transpose(x, (0, 3, 1, 2)) / 255)
+    # transform = transforms.Lambda(
+        # lambda x: np.transpose(x, (0, 3, 1, 2)) / 255)
+    transform = lambda x: x/255.0
     train_loader = DataLoader(
         RolloutSequenceDataset('datasets/carracing', SEQ_LEN, transform, buffer_size=30),
         batch_size=BSIZE, num_workers=8, shuffle=True)

@@ -78,7 +78,7 @@ class MDRNN(_MDRNNBase):
             - ds: (SEQ_LEN, BSIZE) torch tensor
         """
         seq_len, bs = actions.size(0), actions.size(1)
-
+        
         ins = torch.cat([actions, latents], dim=-1)
         outs, _ = self.rnn(ins)
         gmm_outs = self.gmm_linear(outs)
@@ -96,10 +96,10 @@ class MDRNN(_MDRNNBase):
         pi = pi.view(seq_len, bs, self.gaussians)
         logpi = f.log_softmax(pi, dim=-1)
 
-        rs = gmm_outs[:, :, -2]
+        # rs = gmm_outs[:, :, -2]
 
-        ds = gmm_outs[:, :, -1]
-
+        # ds = gmm_outs[:, :, -1]
+        rs, ds = 0, 0 
         return mus, sigmas, logpi, rs, ds
 
 class MDRNNCell(_MDRNNBase):

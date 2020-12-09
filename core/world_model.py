@@ -55,6 +55,8 @@ class World_model(nn.Module):
         self.vae.load_state_dict(vae_state['state_dict'])
 
         self.mdrnn = MDRNNCell(LSIZE, ASIZE, RSIZE, 5)
+        rnn_state = torch.load(rnn_file)
+        self.mdrnn.load_state_dict(rnn_state['state_dict'])
 
         self.device = device
         self.actor_critic = ActorCriticWorldModel()
@@ -82,8 +84,8 @@ class World_model(nn.Module):
             self.Loss['VAE_Loss'] = self.VAE_loss(
                 reconsturct_x, obs/255.0, latent_mu, log_var)
 
-        x = torch.cat((latent_mu, self.hidden[:, :RSIZE]), dim=1).detach()
-        logits, actor_logstd, value = self.actor_critic(x)
+        self.processed_obs = torch.cat((latent_mu, self.hidden[:, :RSIZE]), dim=1).detach()
+        logits, actor_logstd, value = self.actor_critic(self.processed_obs)
         actions, action_log_probs = self.compute_action(logits, actor_logstd)
         
         mus, sigmas, logpi, _, _, next_hidden = self.mdrnn(
