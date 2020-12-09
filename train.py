@@ -260,7 +260,7 @@ def _train(trainer, envs, eval_envs, config, num_envs, algo, log_dir, tournament
 
         # ===== Update Policy =====
         with update_timer:
-            policy_loss, value_loss, dist_entropy, total_loss = trainer.update(trainer.rollouts)
+            policy_loss, value_loss, dist_entropy, total_loss,  vae_loss, mdrnn_loss = trainer.update(trainer.rollouts)
             trainer.rollouts.after_update()
 
         # ===== Reset opponent if in tournament mode =====
@@ -295,6 +295,8 @@ def _train(trainer, envs, eval_envs, config, num_envs, algo, log_dir, tournament
                     policy_loss=policy_loss,
                     entropy=dist_entropy,
                     value_loss=value_loss,
+                    vae_loss= vae_loss,
+                    mdrnn_loss=mdrnn_loss,
                     total_loss=total_loss
                 ),
                 total_steps=total_steps,

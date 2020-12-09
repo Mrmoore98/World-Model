@@ -9,3 +9,4 @@ dock_config.json
 .mypy_cache
 /vae_dir
 *.pkl
+/exp_dir

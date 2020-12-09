@@ -111,9 +111,9 @@ if __name__ == "__main__":
     # ])
 
     dataset_train = RolloutObservationDataset('datasets/carracing', 
-                                            transform_train, buffer_size= 100, train=True)
+                                            transform_train, buffer_size= 600, train=True)
     dataset_test = RolloutObservationDataset('datasets/carracing', 
-                                            transform_test, buffer_size= 100, train=False)
+                                            transform_test, buffer_size= 200, train=False)
     train_loader = torch.utils.data.DataLoader(
         dataset_train, batch_size=args.batch_size, shuffle=True, num_workers=2)
     test_loader = torch.utils.data.DataLoader(
