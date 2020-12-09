@@ -74,7 +74,7 @@ class BaseTrainer:
     def process_obs(self, obs):
         # Change to tensor, change type, add batch dimension for observation.
         if not isinstance(obs, torch.Tensor):
-            obs = np.asarray(obs)/255.0
+            obs = np.asarray(obs)
             obs = torch.from_numpy(obs.astype(np.float32)).to(self.device)
         obs = obs.float()
         if obs.ndim == 1 or obs.ndim == 3:  # Add additional batch dimension.

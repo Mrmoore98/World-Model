@@ -20,3 +20,11 @@
     --lr 1e-4 \
     --action-repeat 1 \
     --entropy 0.0
+
+for Cluster
+
+    srun --partition=ad_ap --gres=gpu:1 -n1 --ntasks-per-node=1 python train.py --algo PPO --env-id cCarRacing-v0 \
+    --num-envs 12 \
+    --lr 1e-4 \
+    --action-repeat 1 \
+    --entropy 0.0
