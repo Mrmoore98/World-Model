@@ -61,7 +61,13 @@ class PPOTrainer(BaseTrainer):
         self.clip_param = config.ppo_clip_param
 
     def setup_optimizer(self):
-        self.optimizer = optim.Adam(self.model.parameters(), lr=self.lr, eps=1e-5)
+
+        params = [ 
+            {'params': self.model.vae.parameters(), 'lr': 1e-4},
+            {'params': self.model.mdrnn.parameters(), 'lr': 1e-4},
+            {'params': self.model.actor_critic.parameters(), 'lr':1e-4},
+        ]
+        self.optimizer = optim.Adam( params, lr=self.lr, eps=1e-5)
 
     def setup_rollouts(self):
         act_dim = 1 if self.discrete else self.num_actions
@@ -99,11 +105,9 @@ class PPOTrainer(BaseTrainer):
         loss = policy_loss + self.config.value_loss_weight * value_loss - self.config.entropy_loss_weight * dist_entropy
         
         # world model Loss 
-        loss += self.model.Loss['VAE_Loss'] + self.model.Loss['MDN_Loss']
-        # print("VAE_loss", self.model.Loss['VAE_Loss'].item())
-        # print("MDN_Loss", self.model.Loss['MDN_Loss'].item())
-
-        return loss, policy_loss, value_loss, dist_entropy
+        loss += 0.01 * self.model.Loss['VAE_Loss'] + 0.01 * self.model.Loss['MDN_Loss']
+        
+        return loss, policy_loss, value_loss, dist_entropy, self.model.Loss['VAE_Loss'].item(), self.model.Loss['MDN_Loss'].item()
 
     def update(self, rollout):
         # Get the normalized advantages
@@ -114,6 +118,8 @@ class PPOTrainer(BaseTrainer):
         policy_loss_epoch = []
         dist_entropy_epoch = []
         total_loss_epoch = []
+        vae_loss_epoch = []
+        mdrnn_loss_epoch = [] 
 
         # Train for num_sgd_steps iterations (compared to A2C which only
         # train one iteration)
@@ -121,7 +127,7 @@ class PPOTrainer(BaseTrainer):
             data_generator = rollout.feed_forward_generator(advantages, self.mini_batch_size)
 
             for sample in data_generator:
-                total_loss, policy_loss, value_loss, dist_entropy = self.compute_loss(sample)
+                total_loss, policy_loss, value_loss, dist_entropy, vae_loss, mdrnn_loss = self.compute_loss(sample)
                 self.optimizer.zero_grad()
                 total_loss.backward()
                 torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.config.grad_norm_max)
@@ -131,6 +137,9 @@ class PPOTrainer(BaseTrainer):
                 policy_loss_epoch.append(policy_loss.item())
                 total_loss_epoch.append(total_loss.item())
                 dist_entropy_epoch.append(dist_entropy.item())
+                vae_loss_epoch.append(vae_loss)
+                mdrnn_loss_epoch.append(mdrnn_loss)
+
 
         return np.mean(policy_loss_epoch), np.mean(value_loss_epoch), \
-               np.mean(dist_entropy_epoch), np.mean(total_loss_epoch)
+               np.mean(dist_entropy_epoch), np.mean(total_loss_epoch), np.mean(vae_loss_epoch), np.mean(mdrnn_loss_epoch)

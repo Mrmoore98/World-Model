@@ -96,11 +96,11 @@ class BaseTrainer:
             actions = actions.view(-1, 1)  # In discrete case only return the chosen action.
 
         else:  # Please use normal distribution. You should
-            means, log_std, values = self.model(obs)
-            normal_distribution = torch.distributions.normal.Normal(means, torch.exp(log_std))
-            actions = normal_distribution.sample()
-            action_log_probs = normal_distribution.log_prob(actions).sum(axis=1)
-            actions = actions.view(-1, self.num_actions)
+            actions, values, action_log_probs = self.model(obs)
+            # normal_distribution = torch.distributions.normal.Normal(means, torch.exp(log_std))
+            # actions = normal_distribution.sample()
+            # action_log_probs = normal_distribution.log_prob(actions).sum(axis=1)
+            # actions = actions.view(-1, self.num_actions)
 
         values = values.view(-1, 1)
         action_log_probs = action_log_probs.view(-1, 1)
@@ -119,15 +119,18 @@ class BaseTrainer:
             action_log_probs = dist.log_prob(act.view(-1)).view(-1, 1)
             dist_entropy = dist.entropy().mean()
         else:
-            if self.model.__class__.__name__ == 'World_model':
-                next_obs = self.process_obs(next_obs)
-                means, log_std, values = self.model(obs, hidden, next_obs)
-            else:   
-                means, log_std, values = self.model(obs)
-            action_std = torch.exp(log_std)
-            dist = torch.distributions.Normal(means, action_std)
-            action_log_probs = dist.log_prob(act).sum(axis=1).view(-1, 1)
-            dist_entropy = dist.entropy().mean()
+            # if self.model.__class__.__name__ == 'World_model':
+            #     next_obs = self.process_obs(next_obs)
+            #     means, log_std, values = self.model(obs, hidden, next_obs) 
+            # else:   
+            #     means, log_std, values = self.model(obs)
+            # action_std = torch.exp(log_std)
+            # dist = torch.distributions.Normal(means, action_std)
+            # action_log_probs = dist.log_prob(act).sum(axis=1).view(-1, 1)
+            # dist_entropy = dist.entropy().mean()
+            next_obs = self.process_obs(next_obs)
+            actions, values, action_log_probs = self.model(obs, hidden, next_obs) 
+            dist_entropy = self.model.entropy
 
         assert dist_entropy.shape == ()
 
@@ -143,7 +146,7 @@ class BaseTrainer:
         if self.discrete:
             _, values = self.model(obs)
         else:
-            _, _, values = self.model(obs)
+            _, values, _ = self.model(obs)
         return values
 
     def save_w(self, log_dir="", suffix=""):

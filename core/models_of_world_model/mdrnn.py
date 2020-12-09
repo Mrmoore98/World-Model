@@ -33,7 +33,7 @@ def gmm_loss(batch, mus, sigmas, logpi, reduce=True): # pylint: disable=too-many
     batch = batch.unsqueeze(-2)
     normal_dist = Normal(mus, sigmas)
     g_log_probs = normal_dist.log_prob(batch)
-    log_probs = logpi + g_log_probs.sum(dim=-1) #weighted the mixture
+    log_probs = (logpi + g_log_probs.mean(dim=-1)).sum(dim=-1) #weighted the mixture
     # g_probs = g_log_probs.exp()
     # log_probs = g_probs.sum(dim=-1).log()
     if reduce:
