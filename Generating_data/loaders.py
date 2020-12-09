@@ -52,6 +52,7 @@ class _RolloutDataset(torch.utils.data.Dataset):  # pylint: disable=too-few-publ
                 self._buffer += [{k: np.copy(v) for k, v in data.items()}]
                 self._cum_size += [self._cum_size[-1] +
                                    self._data_per_sequence(data['rewards'].shape[0])]
+                pbar.set_description_str('data_len{}'.format(data['rewards'].shape[0]))
             pbar.update(1)
         pbar.close()
 

@@ -55,13 +55,25 @@ class World_model(nn.Module):
         self.vae.load_state_dict(vae_state['state_dict'])
 
         self.mdrnn = MDRNNCell(LSIZE, ASIZE, RSIZE, 5)
-        rnn_state = torch.load(rnn_file)
-        self.mdrnn.load_state_dict(rnn_state['state_dict'])
+        # rnn_state = torch.load(rnn_file)
+        # self.mdrnn.load_state_dict(rnn_state['state_dict'])
 
         self.device = device
         self.actor_critic = ActorCriticWorldModel()
         self.hidden = torch.zeros(12, RSIZE*2).to(self.device)
         self.Loss = {'VAE_Loss': 0, 'MDN_Loss': 0}
+
+    @torch.no_grad()
+    def world_model(self, obs):
+        reconsturct_x, self.latent_mu, log_var = self.vae(obs/255.0)
+        self.processed_obs = torch.cat((self.latent_mu, self.hidden[:, :RSIZE]), dim=1).detach()
+        return self.processed_obs
+    
+    @torch.no_grad()
+    def update_hidden(self, actions):
+        mus, sigmas, logpi, _, _, next_hidden = self.mdrnn(
+            actions, self.latent_mu, [self.hidden[:, :RSIZE], self.hidden[:, RSIZE:]])
+        self.hidden = torch.cat(next_hidden, dim=1)
 
     def get_action_and_transition(self, obs, next_hidden=None, next_obs=None):
         """ Get action and transition.
@@ -103,9 +115,10 @@ class World_model(nn.Module):
 
     def forward(self, obs, next_hidden=None, next_obs=None):
 
-        action, value, action_log_probs = self.get_action_and_transition(
-            obs, next_hidden, next_obs)
-        return action, value, action_log_probs
+        # action, value, action_log_probs = self.get_action_and_transition(
+        #     obs, next_hidden, next_obs)
+        logits, actor_logstd, value = self.actor_critic(obs)
+        return logits, actor_logstd, value
 
     def compute_action(self, means, log_std):
         normal_distribution = torch.distributions.normal.Normal(

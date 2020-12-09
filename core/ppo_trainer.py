@@ -77,14 +77,14 @@ class PPOTrainer(BaseTrainer):
     def compute_loss(self, sample):
         """Compute the loss of PPO"""
         observations_batch, actions_batch, return_batch, masks_batch, \
-        old_action_log_probs_batch, adv_targ, hidden_batch, next_observations_batch = sample
+        old_action_log_probs_batch, adv_targ, processed_observation_batch = sample
 
         assert old_action_log_probs_batch.shape == (self.mini_batch_size, 1)
         assert adv_targ.shape == (self.mini_batch_size, 1)
         assert return_batch.shape == (self.mini_batch_size, 1)
 
         values, action_log_probs, dist_entropy = self.evaluate_actions(
-            observations_batch, actions_batch, hidden_batch, next_observations_batch)
+            processed_observation_batch, actions_batch)
 
         assert values.shape == (self.mini_batch_size, 1)
         assert action_log_probs.shape == (self.mini_batch_size, 1)
@@ -104,10 +104,11 @@ class PPOTrainer(BaseTrainer):
         # This is the total loss
         loss = policy_loss + self.config.value_loss_weight * value_loss - self.config.entropy_loss_weight * dist_entropy
         
-        # world model Loss 
-        loss += 0.01 * self.model.Loss['VAE_Loss'] + 0.01 * self.model.Loss['MDN_Loss']
+        # # world model Loss 
+        # loss += 0.01 * self.model.Loss['VAE_Loss'] + 0.01 * self.model.Loss['MDN_Loss']
         
-        return loss, policy_loss, value_loss, dist_entropy, self.model.Loss['VAE_Loss'].item(), self.model.Loss['MDN_Loss'].item()
+        return loss, policy_loss, value_loss, dist_entropy, \
+            # self.model.Loss['VAE_Loss'].item(), self.model.Loss['MDN_Loss'].item()
 
     def update(self, rollout):
         # Get the normalized advantages
@@ -127,7 +128,9 @@ class PPOTrainer(BaseTrainer):
             data_generator = rollout.feed_forward_generator(advantages, self.mini_batch_size)
 
             for sample in data_generator:
-                total_loss, policy_loss, value_loss, dist_entropy, vae_loss, mdrnn_loss = self.compute_loss(sample)
+                total_loss, policy_loss, value_loss, dist_entropy= self.compute_loss(sample)
+                    #  vae_loss, mdrnn_loss\
+                        # = self.compute_loss(sample)
                 self.optimizer.zero_grad()
                 total_loss.backward()
                 torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.config.grad_norm_max)
@@ -137,9 +140,10 @@ class PPOTrainer(BaseTrainer):
                 policy_loss_epoch.append(policy_loss.item())
                 total_loss_epoch.append(total_loss.item())
                 dist_entropy_epoch.append(dist_entropy.item())
-                vae_loss_epoch.append(vae_loss)
-                mdrnn_loss_epoch.append(mdrnn_loss)
+                # vae_loss_epoch.append(vae_loss)
+                # mdrnn_loss_epoch.append(mdrnn_loss)
 
 
         return np.mean(policy_loss_epoch), np.mean(value_loss_epoch), \
-               np.mean(dist_entropy_epoch), np.mean(total_loss_epoch), np.mean(vae_loss_epoch), np.mean(mdrnn_loss_epoch)
+               np.mean(dist_entropy_epoch), np.mean(total_loss_epoch),\
+                    # np.mean(vae_loss_epoch), np.mean(mdrnn_loss_epoch)

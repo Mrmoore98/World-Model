@@ -80,9 +80,14 @@ class BaseTrainer:
         if obs.ndim == 1 or obs.ndim == 3:  # Add additional batch dimension.
             obs = obs.view(1, *obs.shape)
         return obs
+ 
+    def obs_to_device(self, obs):
+        obs = np.asarray(obs)
+        obs = torch.from_numpy(obs.astype(np.float32)).to(self.device)
+        return obs
 
     def compute_action(self, obs, deterministic=False):
-        obs = self.process_obs(obs)
+        # obs = self.process_obs(obs)
 
         # [TODO] Get the actions and the log probability of the action from the output of neural network.
         #  Hint: Use proper distribution to help you
@@ -96,11 +101,11 @@ class BaseTrainer:
             actions = actions.view(-1, 1)  # In discrete case only return the chosen action.
 
         else:  # Please use normal distribution. You should
-            actions, values, action_log_probs = self.model(obs)
-            # normal_distribution = torch.distributions.normal.Normal(means, torch.exp(log_std))
-            # actions = normal_distribution.sample()
-            # action_log_probs = normal_distribution.log_prob(actions).sum(axis=1)
-            # actions = actions.view(-1, self.num_actions)
+            means, log_std, values = self.model(obs)
+            normal_distribution = torch.distributions.normal.Normal(means, torch.exp(log_std))
+            actions = normal_distribution.sample()
+            action_log_probs = normal_distribution.log_prob(actions).sum(axis=1)
+            actions = actions.view(-1, self.num_actions)
 
         values = values.view(-1, 1)
         action_log_probs = action_log_probs.view(-1, 1)
@@ -111,7 +116,7 @@ class BaseTrainer:
         """Run models to get the values, log probability and action
         distribution entropy of the action in current state"""
 
-        obs = self.process_obs(obs)
+        # obs = self.process_obs(obs)
 
         if self.discrete:
             logits, values = self.model(obs)
@@ -120,17 +125,17 @@ class BaseTrainer:
             dist_entropy = dist.entropy().mean()
         else:
             # if self.model.__class__.__name__ == 'World_model':
-            #     next_obs = self.process_obs(next_obs)
+                # next_obs = self.process_obs(next_obs)
             #     means, log_std, values = self.model(obs, hidden, next_obs) 
             # else:   
-            #     means, log_std, values = self.model(obs)
-            # action_std = torch.exp(log_std)
-            # dist = torch.distributions.Normal(means, action_std)
-            # action_log_probs = dist.log_prob(act).sum(axis=1).view(-1, 1)
-            # dist_entropy = dist.entropy().mean()
-            next_obs = self.process_obs(next_obs)
-            actions, values, action_log_probs = self.model(obs, hidden, next_obs) 
-            dist_entropy = self.model.entropy
+            means, log_std, values = self.model(obs)
+            action_std = torch.exp(log_std)
+            dist = torch.distributions.Normal(means, action_std)
+            action_log_probs = dist.log_prob(act).sum(axis=1).view(-1, 1)
+            dist_entropy = dist.entropy().mean()
+            # next_obs = self.process_obs(next_obs)
+            # actions, values, action_log_probs = self.model(obs, hidden, next_obs) 
+            # dist_entropy = self.model.entropy
 
         assert dist_entropy.shape == ()
 
@@ -142,11 +147,11 @@ class BaseTrainer:
     def compute_values(self, obs):
         """Compute the values corresponding to current policy at current
         state"""
-        obs = self.process_obs(obs)
+        # obs = self.process_obs(obs)
         if self.discrete:
             _, values = self.model(obs)
         else:
-            _, values, _ = self.model(obs)
+            _, _, values = self.model(obs)
         return values
 
     def save_w(self, log_dir="", suffix=""):

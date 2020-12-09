@@ -195,7 +195,9 @@ def train(args):
     print("Start training!")
     obs = envs.reset()
     # frame_stack_tensor.update(obs)
-    trainer.rollouts.before_update(obs)
+    raw_obs = trainer.process_obs(obs)
+    processed_obs = trainer.model.world_model(raw_obs)
+    trainer.rollouts.before_update(obs, processed_obs)
 
     try:
         _train(trainer, envs, eval_envs, config, num_envs, algo, log_dir, False, False)
@@ -226,7 +228,8 @@ def _train(trainer, envs, eval_envs, config, num_envs, algo, log_dir, tournament
                 if hasattr(trainer.model, 'reset_state'):
                     trainer.model.reset_state()
                 with torch.no_grad():
-                    values, actions, action_log_prob = trainer.compute_action(trainer.rollouts.observations[index])
+                    values, actions, action_log_prob = trainer.compute_action(trainer.rollouts.processed_observations[index])
+                    trainer.model.update_hidden(actions)
 
                 if trainer.discrete:
                     cpu_actions = actions.view(-1).cpu().numpy()
@@ -246,21 +249,25 @@ def _train(trainer, envs, eval_envs, config, num_envs, algo, log_dir, tournament
                 # Store samples
                 if trainer.discrete:
                     actions = actions.view(-1, 1)
-
-                hidden = None
-                if hasattr(trainer.model, 'hidden') and isinstance(trainer.model.hidden, torch.Tensor):
-                    hidden = trainer.model.hidden
-                trainer.rollouts.insert(obs, actions, action_log_prob, values, rewards, masks, hidden)
+                    
+                with torch.no_grad():
+                    raw_obs = trainer.process_obs(obs)
+                    processed_obs = trainer.model.world_model(raw_obs)
+                trainer.rollouts.insert(obs, actions, action_log_prob, values, rewards, masks, processed_obs) 
+                # trainer.rollouts.insert(obs, actions, action_log_prob, values, rewards, masks)
 
         # ===== Process Samples =====
         with process_timer:
             with torch.no_grad():
-                next_value = trainer.compute_values(trainer.rollouts.observations[-1])
+                next_value = trainer.compute_values(trainer.rollouts.processed_observations[-1])
             trainer.rollouts.compute_returns(next_value, config.gamma)
 
         # ===== Update Policy =====
         with update_timer:
-            policy_loss, value_loss, dist_entropy, total_loss,  vae_loss, mdrnn_loss = trainer.update(trainer.rollouts)
+            policy_loss, value_loss, dist_entropy, total_loss = trainer.update(trainer.rollouts)
+                #   vae_loss, mdrnn_loss\ 
+                # = trainer.update(trainer.rollouts)
+            trainer.model.reset_state()
             trainer.rollouts.after_update()
 
         # ===== Reset opponent if in tournament mode =====
@@ -295,8 +302,8 @@ def _train(trainer, envs, eval_envs, config, num_envs, algo, log_dir, tournament
                     policy_loss=policy_loss,
                     entropy=dist_entropy,
                     value_loss=value_loss,
-                    vae_loss= vae_loss,
-                    mdrnn_loss=mdrnn_loss,
+                    # vae_loss= vae_loss,
+                    # mdrnn_loss=mdrnn_loss,
                     total_loss=total_loss
                 ),
                 total_steps=total_steps,

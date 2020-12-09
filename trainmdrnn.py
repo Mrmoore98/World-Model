@@ -38,10 +38,13 @@ def to_latent(obs, next_obs):
         (obs_mu, obs_logsigma), (next_obs_mu, next_obs_logsigma) = [
             vae(x)[1:] for x in (obs, next_obs)]
 
-        latent_obs, latent_next_obs = [
-            (x_mu + x_logsigma.exp() * torch.randn_like(x_mu)).view(BSIZE, SEQ_LEN, LSIZE)
-            for x_mu, x_logsigma in
-            [(obs_mu, obs_logsigma), (next_obs_mu, next_obs_logsigma)]]
+        try:
+            latent_obs, latent_next_obs = [
+                (x_mu + x_logsigma.exp() * torch.randn_like(x_mu)).view(-1, SEQ_LEN, LSIZE)
+                for x_mu, x_logsigma in
+                [(obs_mu, obs_logsigma), (next_obs_mu, next_obs_logsigma)]]
+        except:
+            import pdb; pdb.set_trace()
     return latent_obs, latent_next_obs
 
 def get_loss(latent_obs, action, reward, terminal,
@@ -191,10 +194,10 @@ if __name__ == "__main__":
         # lambda x: np.transpose(x, (0, 3, 1, 2)) / 255)
     transform = lambda x: x/255.0
     train_loader = DataLoader(
-        RolloutSequenceDataset('datasets/carracing', SEQ_LEN, transform, buffer_size=30),
+        RolloutSequenceDataset('datasets/carracing', SEQ_LEN, transform, buffer_size=100),
         batch_size=BSIZE, num_workers=8, shuffle=True)
     test_loader = DataLoader(
-        RolloutSequenceDataset('datasets/carracing', SEQ_LEN, transform, train=False, buffer_size=10),
+        RolloutSequenceDataset('datasets/carracing', SEQ_LEN, transform, train=False, buffer_size=100),
         batch_size=BSIZE, num_workers=8)
 
     train = partial(data_pass, train=True, include_reward=args.include_reward)

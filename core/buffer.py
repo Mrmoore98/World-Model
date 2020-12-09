@@ -19,6 +19,7 @@ class PPORolloutStorage:
             return torch.zeros(shapes, dtype=dtype).to(device)
 
         self.observations = zeros(num_steps + 1, num_processes, *obs_shape, dtype=torch.uint8)
+        self.processed_observations = zeros(num_steps + 1, num_processes, 288, dtype=torch.float)
         self.rewards = zeros(num_steps, num_processes, 1)
         self.value_preds = zeros(num_steps + 1, num_processes, 1)
         self.returns = zeros(num_steps + 1, num_processes, 1)
@@ -44,12 +45,10 @@ class PPORolloutStorage:
         for indices in sampler:
             observations_batch = self.observations[:-1].view(
                 -1, *self.observations.size()[2:])[indices]
-            next_observations_batch = self.observations[1:].view(
-                -1, *self.observations.size()[2:])[indices]
+            processed_obs_batch = self.processed_observations[:-1].view(
+                -1, *self.processed_observations.size()[2:])[indices]
 
             actions_batch = self.actions.view(-1, self.actions.size(-1))[indices]
-            hidden_batch = self.hidden.view(-1, self.hidden.size(-1))[indices]
-
             return_batch = self.returns[:-1].view(-1, 1)[indices]
             masks_batch = self.masks[:-1].view(-1, 1)[indices]
             old_action_log_probs_batch = self.action_log_probs.view(-1, 1)[indices]
@@ -57,7 +56,7 @@ class PPORolloutStorage:
 
 
             yield observations_batch, actions_batch, return_batch, \
-                  masks_batch, old_action_log_probs_batch, adv_targ, hidden_batch, next_observations_batch
+                  masks_batch, old_action_log_probs_batch, adv_targ, processed_obs_batch
 
     def compute_returns(self, next_value, gamma):
         if self.gae:
@@ -83,24 +82,26 @@ class PPORolloutStorage:
             # Ignore this part
             raise NotImplementedError("Not for this assignment.")
 
-    def insert(self, current_obs, action, action_log_prob, value_pred, reward, mask, hidden=None):
+    def insert(self, current_obs, action, action_log_prob, value_pred, reward, mask, processed_obs=None):
         if isinstance(current_obs, np.ndarray):
             current_obs = torch.from_numpy(current_obs.astype(np.uint8))
         self.observations[self.step + 1].copy_(current_obs)
+        self.processed_observations[self.step + 1].copy_(processed_obs)
+        
         self.actions[self.step].copy_(action)
         self.action_log_probs[self.step].copy_(action_log_prob)
         self.value_preds[self.step].copy_(value_pred)
         self.rewards[self.step].copy_(reward)
         self.masks[self.step + 1].copy_(mask)
-        if hidden is not None:
-            self.hidden[self.step].copy_(hidden)
         self.step = (self.step + 1) % self.num_steps
 
     def after_update(self):
         self.observations[0].copy_(self.observations[-1])
+        self.processed_observations[0].copy_(self.processed_observations[-1])
         self.masks[0].copy_(self.masks[-1])
 
-    def before_update(self, obs):
+    def before_update(self, obs, processed_obs=None):
         if isinstance(obs, np.ndarray):
             obs = torch.from_numpy(obs)
         self.observations[0].copy_(obs)
+        self.processed_observations[0].copy_(processed_obs)
