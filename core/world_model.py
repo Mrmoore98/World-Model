@@ -73,20 +73,25 @@ class World_model(nn.Module):
         self.device = device
         self.actor_critic = ActorCriticWorldModel()
         self.hidden = torch.zeros(12, RSIZE*2).to(self.device)
+        self.predict_mu = torch.zeros(12,LSIZE).to(self.device)
         self.Loss = {'VAE_Loss': 0, 'MDN_Loss': 0}
 
     @torch.no_grad()
     def world_model(self, obs):
         reconsturct_x, self.latent_mu, log_var = self.vae(obs/255.0, no_decoder=True)
+        
+        
         self.processed_obs = torch.cat(
-            (self.latent_mu, self.hidden[:, :RSIZE]), dim=1).detach()
+            (self.latent_mu, self.predict_mu), dim=1).detach()
         return self.processed_obs
 
     @torch.no_grad()
     def update_hidden(self, actions):
         mus, sigmas, logpi, _, _, next_hidden = self.mdrnn(
-            actions, self.latent_mu, [self.hidden[:, :RSIZE], self.hidden[:, RSIZE:]], with_MDN=False)
+            actions, self.latent_mu, [self.hidden[:, :RSIZE], self.hidden[:, RSIZE:]], with_MDN=True)
         self.hidden = torch.cat(next_hidden, dim=1)
+        self.predict_mu = self.get_latent(mus, sigmas, logpi.exp())
+
 
     def get_action_and_transition(self, obs, next_hidden=None, next_obs=None):
         """ Get action and transition.
@@ -146,13 +151,15 @@ class World_model(nn.Module):
     def reset_state(self):
         self.hidden = torch.zeros(12, RSIZE*2).to(self.device)
 
-    def get_latent(self, mu, logsigma):
+    def get_latent(self, mu, logsigma, weight=None):
         """ Transform observations to latent space.
 
         :returns: (latent_obs, latent_next_obs)
             - latent: 4D torch tensor (BSIZE, SEQ_LEN, LSIZE)
         """
         latent = mu + logsigma.exp() * torch.randn_like(mu)
+        if weight is not None:
+            latent = (latent*weight.unsqueeze(-1)).sum(-2)
         return latent
 
     def VAE_loss(self, recon_x, x, mu, logsigma):
@@ -175,16 +182,27 @@ class ActorCriticWorldModel(nn.Module):
         num_actions = ASIZE
         # Setup the log std output for continuous action space
         self.actor_logstd = nn.Parameter(torch.zeros(1, num_actions))
+        # self.critic_linear = nn.Sequential(
+        #     nn.Linear(LSIZE + RSIZE, LSIZE + RSIZE),
+        #     nn.ReLU(),
+        #     nn.Linear(LSIZE + RSIZE, 1),
+        # )
+        # self.actor_linear = nn.Sequential(
+        #     nn.Linear(LSIZE + RSIZE, LSIZE + RSIZE),
+        #     nn.ReLU(),
+        #     nn.Linear(LSIZE + RSIZE, num_actions)
+        # )
         self.critic_linear = nn.Sequential(
-            nn.Linear(LSIZE + RSIZE, LSIZE + RSIZE),
+            nn.Linear(LSIZE + LSIZE, LSIZE + LSIZE),
             nn.ReLU(),
-            nn.Linear(LSIZE + RSIZE, 1),
+            nn.Linear(LSIZE + LSIZE, 1),
         )
         self.actor_linear = nn.Sequential(
-            nn.Linear(LSIZE + RSIZE, LSIZE + RSIZE),
+           nn.Linear(LSIZE + LSIZE, LSIZE + LSIZE),
             nn.ReLU(),
-            nn.Linear(LSIZE + RSIZE, num_actions)
+            nn.Linear(LSIZE + LSIZE, num_actions),
         )
+
 
         for param in self.parameters():
             if param.dim() > 1:

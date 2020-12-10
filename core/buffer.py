@@ -19,7 +19,7 @@ class PPORolloutStorage:
             return torch.zeros(shapes, dtype=dtype).to(device)
 
         self.observations = zeros(num_steps + 1, num_processes, *obs_shape, dtype=torch.uint8)
-        self.processed_observations = zeros(num_steps + 1, num_processes, 288, dtype=torch.float)
+        self.processed_observations = zeros(num_steps + 1, num_processes, 64, dtype=torch.float)
         self.rewards = zeros(num_steps, num_processes, 1)
         self.value_preds = zeros(num_steps + 1, num_processes, 1)
         self.returns = zeros(num_steps + 1, num_processes, 1)
