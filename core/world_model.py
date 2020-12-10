@@ -27,6 +27,16 @@ transform = transforms.Compose([
 ])
 
 
+def process_state_dict(state_dict:dict):
+    key_list = list(state_dict.keys())
+    for k in key_list:
+        if k.endswith('_l0'):
+            new_k = k.rstrip('_l0')
+            state_dict[new_k] = state_dict[k].clone()
+            state_dict.pop(k)
+    return state_dict
+
+
 class World_model(nn.Module):
     """ Utility to generate rollouts.
 
@@ -54,9 +64,12 @@ class World_model(nn.Module):
         self.vae = VAE(4, LSIZE)
         self.vae.load_state_dict(vae_state['state_dict'])
 
+
         self.mdrnn = MDRNNCell(LSIZE, ASIZE, RSIZE, 5)
-        # rnn_state = torch.load(rnn_file)
-        # self.mdrnn.load_state_dict(rnn_state['state_dict'])
+        if exists(rnn_file):
+            rnn_state = torch.load(rnn_file)
+            state_dict = process_state_dict(rnn_state['state_dict'])
+            self.mdrnn.load_state_dict(state_dict)
 
         self.device = device
         self.actor_critic = ActorCriticWorldModel()
@@ -182,3 +195,9 @@ class ActorCriticWorldModel(nn.Module):
         logits = self.actor_linear(x)
 
         return logits, self.actor_logstd, value
+
+
+if __name__ == "__main__":
+    device = torch.device(
+            "cuda" if torch.cuda.is_available() else "cpu")
+    test_model = World_model(device)
