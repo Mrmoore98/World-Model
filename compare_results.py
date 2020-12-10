@@ -8,21 +8,25 @@ fig, ax =plt.subplots(figsize=(20,20))
 
 sns.lineplot(
     data=ppo_progress,
-    x="total_steps",
-    # y="training_episode_reward/episode_reward_mean",
-    y="learning_stats/entropy",
+    x="iteration",
+    y="training_episode_reward/episode_reward_mean",
+    # y = 'time_stats/total_time',
+    # y="training_episode_reward/episode_reward_max",
+    # y="learning_stats/entropy",
     ax = ax,
     legend='brief',
     label='1',
     estimator= np.mean
 )
 
-ppo_progress1 = load_progress("./data/cCarRacing-v0_PPO_12-10_11-29")
+ppo_progress1 = load_progress("./data/cCarRacing-v0_PPO_12-10_17-51")
 sns.lineplot(
     data=ppo_progress1,
-    x="total_steps",
-    # y="training_episode_reward/episode_reward_mean",
-    y="learning_stats/entropy",
+    x="iteration",
+    y="training_episode_reward/episode_reward_mean",
+    # y = 'time_stats/total_time',
+    # y="training_episode_reward/episode_reward_max",
+    # y="learning_stats/entropy",
     ax= ax,
     legend='brief',
     label='2'

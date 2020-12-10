@@ -108,7 +108,14 @@ class MDRNNCell(_MDRNNBase):
         super().__init__(latents, actions, hiddens, gaussians)
         self.rnn = nn.LSTMCell(latents + actions, hiddens)
 
-    def forward(self, action, latent, hidden): # pylint: disable=arguments-differ
+    
+    def forward(self, action, latent, hidden, with_MDN=True):
+        if with_MDN:
+            return self.with_MDN(action, latent, hidden)
+        else:
+            return self.without_MDN(action, latent, hidden)
+
+    def with_MDN(self, action, latent, hidden): # pylint: disable=arguments-differ
         """ ONE STEP forward.
 
         :args actions: (BSIZE, ASIZE) torch tensor
@@ -149,3 +156,10 @@ class MDRNNCell(_MDRNNBase):
         # d = out_full[:, -1]
 
         return mus, sigmas, logpi, r, d, next_hidden
+    
+
+    def without_MDN(self, action, latent, hidden):
+        
+        in_al = torch.cat([action, latent], dim=1)
+        next_hidden = self.rnn(in_al, hidden)
+        return 0, 0, 0, 0, 0, next_hidden

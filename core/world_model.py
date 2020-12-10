@@ -27,7 +27,7 @@ transform = transforms.Compose([
 ])
 
 
-def process_state_dict(state_dict:dict):
+def process_state_dict(state_dict: dict):
     key_list = list(state_dict.keys())
     for k in key_list:
         if k.endswith('_l0'):
@@ -53,7 +53,7 @@ class World_model(nn.Module):
         super(World_model, self).__init__()
         """ Build vae, rnn, controller and environment. """
         # Loading world model and vae
-        vae_file, rnn_file= \
+        vae_file, rnn_file = \
             [join('exp_dir/', m, 'best.tar')
              for m in ['vae', 'mdrnn']]
 
@@ -63,7 +63,6 @@ class World_model(nn.Module):
         vae_state = torch.load(vae_file)
         self.vae = VAE(4, LSIZE)
         self.vae.load_state_dict(vae_state['state_dict'])
-
 
         self.mdrnn = MDRNNCell(LSIZE, ASIZE, RSIZE, 5)
         if exists(rnn_file):
@@ -78,14 +77,15 @@ class World_model(nn.Module):
 
     @torch.no_grad()
     def world_model(self, obs):
-        reconsturct_x, self.latent_mu, log_var = self.vae(obs/255.0)
-        self.processed_obs = torch.cat((self.latent_mu, self.hidden[:, :RSIZE]), dim=1).detach()
+        reconsturct_x, self.latent_mu, log_var = self.vae(obs/255.0, no_decoder=True)
+        self.processed_obs = torch.cat(
+            (self.latent_mu, self.hidden[:, :RSIZE]), dim=1).detach()
         return self.processed_obs
-    
+
     @torch.no_grad()
     def update_hidden(self, actions):
         mus, sigmas, logpi, _, _, next_hidden = self.mdrnn(
-            actions, self.latent_mu, [self.hidden[:, :RSIZE], self.hidden[:, RSIZE:]])
+            actions, self.latent_mu, [self.hidden[:, :RSIZE], self.hidden[:, RSIZE:]], with_MDN=False)
         self.hidden = torch.cat(next_hidden, dim=1)
 
     def get_action_and_transition(self, obs, next_hidden=None, next_obs=None):
@@ -109,16 +109,17 @@ class World_model(nn.Module):
             self.Loss['VAE_Loss'] = self.VAE_loss(
                 reconsturct_x, obs/255.0, latent_mu, log_var)
 
-        self.processed_obs = torch.cat((latent_mu, self.hidden[:, :RSIZE]), dim=1).detach()
+        self.processed_obs = torch.cat(
+            (latent_mu, self.hidden[:, :RSIZE]), dim=1).detach()
         logits, actor_logstd, value = self.actor_critic(self.processed_obs)
         actions, action_log_probs = self.compute_action(logits, actor_logstd)
-        
+
         mus, sigmas, logpi, _, _, next_hidden = self.mdrnn(
             actions, latent_mu, [self.hidden[:, :RSIZE], self.hidden[:, RSIZE:]])
-        
+
         if loss:
             with torch.no_grad():
-                next_obs_mu, next_obs_logsigma = self.vae(next_obs/255.0)[1:] 
+                next_obs_mu, next_obs_logsigma = self.vae(next_obs/255.0)[1:]
                 next_latent = self.get_latent(next_obs_mu, next_obs_logsigma)
             self.Loss['MDN_Loss'] = gmm_loss(
                 next_latent, mus, sigmas, logpi)
@@ -151,19 +152,19 @@ class World_model(nn.Module):
         :returns: (latent_obs, latent_next_obs)
             - latent: 4D torch tensor (BSIZE, SEQ_LEN, LSIZE)
         """
-        latent = mu + logsigma.exp() * torch.randn_like(mu)     
+        latent = mu + logsigma.exp() * torch.randn_like(mu)
         return latent
 
     def VAE_loss(self, recon_x, x, mu, logsigma):
         """ VAE loss function """
         BCE = F.mse_loss(recon_x, x, reduction='none')
-        BCE = BCE.mean(dim=0).sum() # first mean up the batch dim
+        BCE = BCE.mean(dim=0).sum()  # first mean up the batch dim
         # see Appendix B from VAE paper:
         # Kingma and Welling. Auto-Encoding Variational Bayes. ICLR, 2014
         # https://arxiv.org/abs/1312.6114
         # 0.5 * sum(1 + log(sigma^2) - mu^2 - sigma^2)
         KLD = -0.5 * (1 + 2 * logsigma -
-                               mu.pow(2) - (2 * logsigma).exp()).mean(0).sum()
+                      mu.pow(2) - (2 * logsigma).exp()).mean(0).sum()
         return BCE + KLD
 
 
@@ -175,16 +176,16 @@ class ActorCriticWorldModel(nn.Module):
         # Setup the log std output for continuous action space
         self.actor_logstd = nn.Parameter(torch.zeros(1, num_actions))
         self.critic_linear = nn.Sequential(
-                                nn.Linear(LSIZE + RSIZE, LSIZE + RSIZE),
-                                nn.ReLU(),
-                                nn.Linear(LSIZE + RSIZE, 1),
-                            )
+            nn.Linear(LSIZE + RSIZE, LSIZE + RSIZE),
+            nn.ReLU(),
+            nn.Linear(LSIZE + RSIZE, 1),
+        )
         self.actor_linear = nn.Sequential(
-                                nn.Linear(LSIZE + RSIZE, LSIZE + RSIZE),
-                                nn.ReLU(),
-                                nn.Linear(LSIZE + RSIZE, num_actions)
-                            )
-        
+            nn.Linear(LSIZE + RSIZE, LSIZE + RSIZE),
+            nn.ReLU(),
+            nn.Linear(LSIZE + RSIZE, num_actions)
+        )
+
         for param in self.parameters():
             if param.dim() > 1:
                 nn.init.xavier_uniform_(param)
@@ -199,5 +200,5 @@ class ActorCriticWorldModel(nn.Module):
 
 if __name__ == "__main__":
     device = torch.device(
-            "cuda" if torch.cuda.is_available() else "cpu")
+        "cuda" if torch.cuda.is_available() else "cpu")
     test_model = World_model(device)

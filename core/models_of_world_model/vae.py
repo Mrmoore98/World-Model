@@ -69,11 +69,27 @@ class VAE(nn.Module):
         self.encoder = Encoder(img_channels, latent_size)
         self.decoder = Decoder(img_channels, latent_size)
 
-    def forward(self, x): # pylint: disable=arguments-differ
+    def forward(self, x, no_decoder=False): # pylint: disable=arguments-differ
+        if no_decoder:
+            return self.with_deoceder(x)
+        else:
+            return self.without_decoder(x)
+
+    def with_deoceder(self, x): # pylint: disable=arguments-differ
         mu, logsigma = self.encoder(x)
         sigma = logsigma.exp()
         eps = torch.randn_like(sigma)
         z = eps.mul(sigma).add_(mu)
 
         recon_x = self.decoder(z)
+        return recon_x, mu, logsigma
+    
+    def without_decoder(self, x):
+        mu, logsigma = self.encoder(x)
+        # sigma = logsigma.exp()
+        # eps = torch.randn_like(sigma)
+        # z = eps.mul(sigma).add_(mu)
+
+        # recon_x = self.decoder(z)
+        recon_x = None
         return recon_x, mu, logsigma
