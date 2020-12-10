@@ -30,7 +30,7 @@ class PPOConfig:
         self.num_envs = 1
 
         # Sample
-        self.num_steps = 200  # num_steps * num_envs = sample_batch_size
+        self.num_steps = 500  # num_steps * num_envs = sample_batch_size
         self.resized_dim = 64
 
         # Learning
@@ -63,8 +63,8 @@ class PPOTrainer(BaseTrainer):
     def setup_optimizer(self):
 
         params = [ 
-            {'params': self.model.vae.parameters(), 'lr': 1e-4},
-            {'params': self.model.mdrnn.parameters(), 'lr': 1e-4},
+            # {'params': self.model.vae.parameters(), 'lr': 1e-4},
+            # {'params': self.model.mdrnn.parameters(), 'lr': 1e-4},
             {'params': self.model.actor_critic.parameters(), 'lr':1e-4},
         ]
         self.optimizer = optim.Adam( params, lr=self.lr, eps=1e-5)

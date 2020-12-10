@@ -118,13 +118,18 @@ def evaluate(trainer, eval_envs, num_episodes=10, seed=0):
     total_episodes = 0
     eval_envs.seed(seed)
     obs = eval_envs.reset()
+    raw_obs = trainer.process_obs(obs)
+    processed_obs = trainer.model.world_model(raw_obs)
     while True:
         obs, reward, done, info, masks, total_episodes, total_steps, \
         episode_rewards = step_envs(
-            get_action(obs), eval_envs, episode_rewards, reward_recorder, episode_length_recorder,
+            get_action(processed_obs), eval_envs, episode_rewards, reward_recorder, episode_length_recorder,
             total_steps, total_episodes, trainer.device)
         if total_episodes >= num_episodes:
             break
+        raw_obs = trainer.process_obs(obs)
+        processed_obs = trainer.model.world_model(raw_obs)
+
     return reward_recorder, episode_length_recorder
 
 

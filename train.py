@@ -252,7 +252,7 @@ def _train(trainer, envs, eval_envs, config, num_envs, algo, log_dir, tournament
                     
                 with torch.no_grad():
                     raw_obs = trainer.process_obs(obs)
-                    processed_obs = trainer.model.world_model(raw_obs)
+                    processed_obs = trainer.model.world_model(raw_obs).detach()
                 trainer.rollouts.insert(obs, actions, action_log_prob, values, rewards, masks, processed_obs) 
                 # trainer.rollouts.insert(obs, actions, action_log_prob, values, rewards, masks)
 
